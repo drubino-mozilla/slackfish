@@ -1,0 +1,31 @@
+{
+  "manifest_version": 2,
+  "name": "Slackfish",
+  "version": "0.1.0",
+  "description": "Bridge between Firefox and Slack via native messaging",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "slackfish@drubino-mozilla"
+    }
+  },
+  "permissions": [
+    "browsingData",
+    "webRequest",
+    "webRequestBlocking",
+    "nativeMessaging",
+    "https://app.slack.com/*",
+    "https://edgeapi.slack.com/*",
+    "https://slack.com/api/*",
+    "https://*.slack.com/api/*"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://app.slack.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

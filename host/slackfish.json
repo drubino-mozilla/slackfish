@@ -1,0 +1,9 @@
+{
+  "name": "slackfish",
+  "description": "Slackfish native messaging host",
+  "path": "c:\\mozilla-source\\slackfish\\host\\slackfish.bat",
+  "type": "stdio",
+  "allowed_extensions": [
+    "slackfish@drubino-mozilla"
+  ]
+}
