@@ -403,6 +403,57 @@ browser.webRequest.onBeforeRequest.addListener(
   ["blocking", "requestBody"]
 );
 
+// --- WebSocket event processing ---
+
+function processWsEvent(event) {
+  const t = event.type;
+
+  if (t === "message" && event.channel) {
+    // Ignore subtypes that aren't real messages (typing, etc.)
+    const skip = new Set(["message_changed", "message_deleted", "channel_join", "channel_leave"]);
+    if (event.subtype && skip.has(event.subtype)) {
+      if (event.subtype === "message_changed" && event.message) {
+        // Edited message — update with new content
+        const edited = {
+          ...event.message,
+          channel: event.channel,
+        };
+        sendToHost({
+          type: "messages",
+          method: "websocket",
+          channel_id: event.channel,
+          messages: [normalizeMessage(edited)],
+          thread_ts: edited.thread_ts || null,
+          has_more: false,
+        });
+        sendLog("info", `WS: edited message in ${event.channel}`);
+      }
+      return;
+    }
+
+    sendToHost({
+      type: "messages",
+      method: "websocket",
+      channel_id: event.channel,
+      messages: [normalizeMessage(event)],
+      thread_ts: event.thread_ts || null,
+      has_more: false,
+    });
+    sendLog("info", `WS: message in ${event.channel} from ${event.user || "bot"}`);
+  }
+
+  if (t === "reaction_added" && event.item) {
+    sendLog("debug", `WS: reaction ${event.reaction} in ${event.item.channel}`);
+  }
+
+  if (t === "user_change" && event.user) {
+    sendToHost({
+      type: "users",
+      users: [normalizeUser(event.user)],
+    });
+  }
+}
+
 // --- Listen for messages from content script ---
 
 browser.runtime.onMessage.addListener((msg, sender) => {
@@ -414,6 +465,12 @@ browser.runtime.onMessage.addListener((msg, sender) => {
     };
     console.log("[Slackfish] Context updated:", currentContext);
     sendToHost({ type: "context", ...currentContext });
+  } else if (msg.type === "ws_event") {
+    try {
+      processWsEvent(msg.payload);
+    } catch (e) {
+      sendLog("error", `WS event error: ${e.message}`);
+    }
   }
 });
 
