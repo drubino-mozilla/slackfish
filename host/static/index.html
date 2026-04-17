@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/icon_32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="/icons/icon_16x16.png">
+<title>Slackfish</title>
+<style>
+:root {
+  --bg-primary: #1a1d21;
+  --bg-secondary: #222529;
+  --bg-tertiary: #2c2d31;
+  --bg-hover: #35373b;
+  --bg-active: #1264a3;
+  --text-primary: #d1d2d3;
+  --text-secondary: #ababad;
+  --text-muted: #8b8b8d;
+  --text-bright: #f0f0f0;
+  --border: #3a3b3d;
+  --accent: #1264a3;
+  --accent-hover: #1474bb;
+  --green: #2bac76;
+  --red: #e74c3c;
+  --yellow: #e8a230;
+  --link: #1d9bd1;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "SF Mono", "Fira Code", "Fira Mono", Menlo, monospace;
+  --sidebar-w: 260px;
+  --detail-w: 380px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font);
+  font-size: 14px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Top bar --- */
+#topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  height: 44px;
+}
+
+#topbar .logo {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--text-bright);
+  white-space: nowrap;
+}
+
+#search-input {
+  flex: 1;
+  max-width: 480px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+}
+#search-input:focus { border-color: var(--accent); }
+#search-input::placeholder { color: var(--text-muted); }
+
+#context-indicator {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 300px;
+}
+
+#sse-status {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--red);
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+#sse-status.connected { background: var(--green); }
+
+/* --- Main layout --- */
+#layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* --- Sidebar --- */
+#sidebar {
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#channel-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+.nav-item {
+  padding: 6px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  margin: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nav-item:hover { background: var(--bg-hover); color: var(--text-bright); }
+.nav-item.active { background: var(--bg-active); color: #fff; }
+
+.nav-separator {
+  height: 1px;
+  background: var(--border);
+  margin: 6px 16px;
+}
+
+.channel-group-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  padding: 12px 16px 4px;
+}
+
+.channel-item {
+  padding: 4px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 4px;
+  margin: 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.channel-item .ch-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  font-size: 12px;
+  flex-shrink: 0;
+  background: #2a6496;
+}
+.channel-item:hover { background: var(--bg-hover); color: var(--text-bright); }
+.channel-item.active { background: var(--bg-active); color: #fff; }
+.channel-item.context-highlight { border-left: 3px solid var(--yellow); padding-left: 13px; }
+
+.channel-item .badge {
+  margin-left: auto;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 600;
+  flex-shrink: 0;
+  display: none;
+}
+
+#sidebar-stats {
+  padding: 10px 16px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  line-height: 1.6;
+}
+
+/* --- Main panel --- */
+#main-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+#main-header {
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--text-bright);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#header-name {
+  color: var(--text-bright);
+  text-decoration: none;
+}
+#header-name[href]:hover { color: var(--link); }
+
+#main-header .topic {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#messages-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+#empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--text-muted);
+  gap: 8px;
+  padding: 40px;
+  text-align: center;
+}
+#empty-state .title { font-size: 18px; color: var(--text-secondary); }
+#empty-state .subtitle { font-size: 13px; line-height: 1.5; }
+
+.message {
+  padding: 4px 20px;
+  display: flex;
+  gap: 10px;
+  line-height: 1.45;
+}
+.message:hover { background: var(--bg-hover); }
+
+.msg-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 4px;
+  background: var(--bg-tertiary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.msg-body { flex: 1; min-width: 0; }
+
+.msg-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.msg-user {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text-bright);
+}
+
+.msg-time {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.msg-time a {
+  color: var(--text-muted);
+  text-decoration: none;
+}
+.msg-time a:hover { text-decoration: underline; color: var(--link); }
+
+.msg-text {
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.msg-text a { color: var(--link); text-decoration: none; }
+.msg-text a:hover { text-decoration: underline; }
+
+.msg-text code {
+  background: var(--bg-tertiary);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.msg-text pre {
+  background: var(--bg-tertiary);
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  overflow-x: auto;
+  margin: 4px 0;
+}
+
+.msg-meta {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.msg-reactions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.reaction {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1px 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.msg-thread-link {
+  color: var(--link);
+  cursor: pointer;
+  font-size: 12px;
+  margin-top: 2px;
+}
+.msg-thread-link:hover { text-decoration: underline; }
+
+.msg-files { margin-top: 4px; }
+.msg-file {
+  display: inline-block;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-right: 4px;
+}
+
+.msg-subtype {
+  font-style: italic;
+  color: var(--text-muted);
+  padding: 2px 20px;
+  font-size: 13px;
+}
+
+/* --- Detail panel --- */
+#detail-panel {
+  width: var(--detail-w);
+  min-width: var(--detail-w);
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border);
+  display: none;
+  flex-direction: column;
+  overflow: hidden;
+}
+#detail-panel.open { display: flex; }
+
+#detail-header {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+#detail-header .title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-bright);
+}
+
+#detail-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+#detail-close:hover { background: var(--bg-hover); color: var(--text-bright); }
+
+#detail-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 0;
+}
+
+/* --- Scrollbar styling --- */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg-hover); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* --- Date separator --- */
+.date-separator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 20px;
+  margin: 4px 0;
+}
+.date-separator .line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.date-separator .label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* --- Search results --- */
+.search-result {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.search-result:hover { background: var(--bg-hover); }
+.search-result .channel-label {
+  font-size: 11px;
+  color: var(--accent);
+  margin-bottom: 2px;
+  cursor: pointer;
+}
+.search-result .channel-label:hover { text-decoration: underline; }
+
+.msg-channel-label {
+  font-size: 11px;
+  color: var(--accent);
+  cursor: pointer;
+  margin-bottom: 1px;
+}
+.msg-channel-label:hover { text-decoration: underline; }
+
+.event-line {
+  padding: 3px 20px;
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.event-line .event-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  min-width: 55px;
+}
+.event-line .event-detail {
+  font-style: italic;
+}
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <span class="logo">Slackfish</span>
+  <input id="search-input" type="text" placeholder="Search cached messages..." />
+  <span id="context-indicator"></span>
+  <div id="sse-status" title="SSE disconnected"></div>
+</div>
+
+<div id="layout">
+  <div id="sidebar">
+    <div id="channel-list"></div>
+    <div id="sidebar-stats"></div>
+  </div>
+
+  <div id="main-panel">
+    <div id="main-header">
+      <a id="header-name" target="_blank" rel="noopener">Select a channel</a>
+      <span class="topic" id="header-topic"></span>
+    </div>
+    <div id="messages-container">
+      <div id="empty-state">
+        <div class="title">Slackfish Web UI</div>
+        <div class="subtitle">
+          Select a channel from the sidebar to view cached messages.<br>
+          Data populates as you browse Slack in Firefox.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="detail-panel">
+    <div id="detail-header">
+      <span class="title" id="detail-title">Thread</span>
+      <button id="detail-close">&times;</button>
+    </div>
+    <div id="detail-content"></div>
+  </div>
+</div>
+
+<script>
+const SLACK_URL = "https://mozilla.slack.com";
+
+const state = {
+  channels: [],
+  selectedChannel: null,
+  contextChannelId: null,
+  messages: [],
+  searchResults: null,
+  detailMode: null, // 'thread' | 'search'
+  view: "activity", // 'activity' | 'channel'
+};
+
+// --- API helpers ---
+
+async function api(path) {
+  const res = await fetch(path);
+  return res.json();
+}
+
+// --- SSE ---
+
+function connectSSE() {
+  const dot = document.getElementById("sse-status");
+  const es = new EventSource("/events");
+
+  es.onopen = () => {
+    dot.className = "connected";
+    dot.title = "Live updates connected";
+  };
+
+  es.onerror = () => {
+    dot.className = "";
+    dot.title = "SSE disconnected -- retrying...";
+  };
+
+  es.onmessage = (evt) => {
+    const data = JSON.parse(evt.data);
+    handleSSE(data);
+  };
+}
+
+const _pending = {};
+function debounce(key, fn, ms = 500) {
+  clearTimeout(_pending[key]);
+  _pending[key] = setTimeout(fn, ms);
+}
+
+function handleSSE(data) {
+  const ev = data.event;
+
+  if (ev === "channels_update" || ev === "users_update") {
+    debounce("channels", loadChannels);
+    debounce("stats", loadStats);
+  }
+
+  if (ev === "channel_update") {
+    debounce("stats", loadStats);
+    if (state.view === "channel" && state.selectedChannel === data.channel_id) {
+      debounce("messages", () => loadMessages(data.channel_id, true));
+    }
+  }
+
+  if (ev === "activity_update") {
+    debounce("stats", loadStats);
+    if (state.view === "activity") {
+      debounce("activity", () => loadActivity(true));
+    }
+  }
+
+  if (ev === "context_update") {
+    debounce("context", loadContext);
+  }
+}
+
+// --- Rendering ---
+
+function renderChannels() {
+  const container = document.getElementById("channel-list");
+
+  const activityActive = state.view === "activity" ? " active" : "";
+  let html = `<div class="nav-item${activityActive}" id="nav-activity">Activity</div>`;
+  html += `<div class="nav-separator"></div>`;
+
+  for (const ch of state.channels) html += channelItemHTML(ch);
+
+  container.innerHTML = html;
+
+  document.getElementById("nav-activity").addEventListener("click", showActivity);
+  container.querySelectorAll(".channel-item").forEach(el => {
+    el.addEventListener("click", () => selectChannel(el.dataset.id));
+  });
+}
+
+function channelItemHTML(ch) {
+  const active = ch.id === state.selectedChannel ? " active" : "";
+  const ctx = ch.id === state.contextChannelId ? " context-highlight" : "";
+  const icon = ch.is_im ? "\u{1F464}" : ch.is_mpim ? "\u{1F465}" : "#";
+  return `<div class="channel-item${active}${ctx}" data-id="${ch.id}" title="${ch.display_name}"><span class="ch-icon">${icon}</span>${esc(ch.display_name)}</div>`;
+}
+
+function renderMessages(messages, container, channelId) {
+  if (!messages.length) {
+    container.innerHTML = `<div id="empty-state"><div class="title">No messages</div><div class="subtitle">Browse this channel in Slack to populate the cache.</div></div>`;
+    return;
+  }
+
+  let html = "";
+  let lastDate = "";
+
+  for (const msg of messages) {
+    const date = msg.time_str.split(" ")[0];
+    if (date !== lastDate) {
+      lastDate = date;
+      html += `<div class="date-separator"><span class="line"></span><span class="label">${date}</span><span class="line"></span></div>`;
+    }
+
+    if (msg.subtype && msg.subtype !== "bot_message" && msg.subtype !== "file_share") {
+      html += `<div class="msg-subtype">${esc(msg.text_resolved)}</div>`;
+      continue;
+    }
+
+    const initials = (msg.user_name || "?").slice(0, 2).toUpperCase();
+    const permalink = msg.permalink
+      ? `<a href="${msg.permalink}" target="_blank" rel="noopener">${msg.time_short}</a>`
+      : msg.time_short;
+
+    let extras = "";
+
+    if (msg.reactions && msg.reactions.length) {
+      extras += `<div class="msg-reactions">${msg.reactions.map(r => `<span class="reaction">:${esc(r.name)}: ${r.count}</span>`).join("")}</div>`;
+    }
+
+    if (msg.reply_count) {
+      const cid = channelId || msg.channel_id;
+      const tts = msg.thread_ts || msg.ts;
+      extras += `<div class="msg-thread-link" data-channel="${cid}" data-thread-ts="${tts}">${msg.reply_count} repl${msg.reply_count === 1 ? "y" : "ies"}</div>`;
+    }
+
+    if (msg.files && msg.files.length) {
+      extras += `<div class="msg-files">${msg.files.map(f => `<span class="msg-file">${esc(f.name || "file")}</span>`).join("")}</div>`;
+    }
+
+    html += `<div class="message">
+  <div class="msg-avatar">${initials}</div>
+  <div class="msg-body">
+    <div class="msg-header">
+      <span class="msg-user">${esc(msg.user_name)}</span>
+      <span class="msg-time">${permalink}</span>
+    </div>
+    <div class="msg-text">${formatText(msg.text_resolved)}</div>
+    ${extras}
+  </div>
+</div>`;
+  }
+
+  container.innerHTML = html;
+
+  container.querySelectorAll(".msg-thread-link").forEach(el => {
+    el.addEventListener("click", () => openThread(el.dataset.channel, el.dataset.threadTs));
+  });
+}
+
+function formatEventTime(t) {
+  if (!t) return "";
+  const d = new Date(t * 1000);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function formatEventDate(t) {
+  if (!t) return "";
+  const d = new Date(t * 1000);
+  return d.toLocaleDateString([], { year: "numeric", month: "short", day: "numeric" });
+}
+
+function renderActivity(events, container) {
+  if (!events.length) {
+    container.innerHTML = `<div id="empty-state"><div class="title">No activity yet</div><div class="subtitle">Browse Slack in Firefox to start capturing messages.</div></div>`;
+    return;
+  }
+
+  let html = "";
+  let lastDate = "";
+
+  for (const ev of events) {
+    const date = formatEventDate(ev.t);
+    if (date !== lastDate) {
+      lastDate = date;
+      html += `<div class="date-separator"><span class="line"></span><span class="label">${date}</span><span class="line"></span></div>`;
+    }
+
+    const timeStr = formatEventTime(ev.t);
+
+    if (ev.type === "new") {
+      const initials = (ev.user_name || "?").slice(0, 2).toUpperCase();
+      const chLabel = esc(ev.channel_name || ev.channel_id);
+      let extras = "";
+      if (ev.reply_count) {
+        extras += `<div class="msg-thread-link" data-channel="${ev.channel_id}" data-thread-ts="${ev.thread_ts || ev.ts}">${ev.reply_count} repl${ev.reply_count === 1 ? "y" : "ies"}</div>`;
+      }
+
+      html += `<div class="message">
+  <div class="msg-avatar">${initials}</div>
+  <div class="msg-body">
+    <div class="msg-channel-label" data-id="${ev.channel_id}">${chLabel}</div>
+    <div class="msg-header">
+      <span class="msg-user">${esc(ev.user_name || ev.user || "unknown")}</span>
+      <span class="msg-time">${timeStr}</span>
+    </div>
+    <div class="msg-text">${formatText(ev.text)}</div>
+    ${extras}
+  </div>
+</div>`;
+    } else if (ev.type === "dup") {
+      const chLabel = esc(ev.channel_name || ev.channel_id || "");
+      html += `<div class="event-line"><span class="event-time">${timeStr}</span><span class="event-detail">${ev.count} message${ev.count === 1 ? "" : "s"} already cached for ${chLabel}</span></div>`;
+    } else if (ev.type === "channels") {
+      html += `<div class="event-line"><span class="event-time">${timeStr}</span><span class="event-detail">${ev.count} channel${ev.count === 1 ? "" : "s"} updated</span></div>`;
+    } else if (ev.type === "users") {
+      html += `<div class="event-line"><span class="event-time">${timeStr}</span><span class="event-detail">${ev.count} user${ev.count === 1 ? "" : "s"} updated</span></div>`;
+    } else if (ev.type === "context") {
+      const chLabel = esc(ev.channel_name || ev.channel_id || "");
+      html += `<div class="event-line"><span class="event-time">${timeStr}</span><span class="event-detail">Navigated to ${chLabel}</span></div>`;
+    }
+  }
+
+  container.innerHTML = html;
+
+  container.querySelectorAll(".msg-channel-label").forEach(el => {
+    el.addEventListener("click", () => selectChannel(el.dataset.id));
+  });
+  container.querySelectorAll(".msg-thread-link").forEach(el => {
+    el.addEventListener("click", () => openThread(el.dataset.channel, el.dataset.threadTs));
+  });
+}
+
+function renderSearchResults(results) {
+  const container = document.getElementById("detail-content");
+  if (!results.length) {
+    container.innerHTML = `<div style="padding:20px;color:var(--text-muted);text-align:center;">No results</div>`;
+    return;
+  }
+
+  let html = "";
+  for (const msg of results) {
+    const chName = msg.is_im ? "DM" : `#${msg.channel_name}`;
+    html += `<div class="search-result">
+  <div class="channel-label" data-id="${msg.channel_id}">${esc(chName)}</div>
+  <div class="msg-header">
+    <span class="msg-user">${esc(msg.user_name)}</span>
+    <span class="msg-time">${msg.time_str}</span>
+  </div>
+  <div class="msg-text">${formatText(msg.text_resolved)}</div>
+</div>`;
+  }
+
+  container.innerHTML = html;
+  container.querySelectorAll(".channel-label").forEach(el => {
+    el.addEventListener("click", () => selectChannel(el.dataset.id));
+  });
+}
+
+function renderStats(stats) {
+  document.getElementById("sidebar-stats").innerHTML =
+    `${stats.channels_cached} channels &middot; ${stats.users_cached} users &middot; ${stats.total_messages} messages`;
+}
+
+function renderContext(ctx) {
+  const el = document.getElementById("context-indicator");
+  state.contextChannelId = ctx.active ? ctx.channel_id : null;
+  if (ctx.active) {
+    el.textContent = `Viewing: ${ctx.channel_name}`;
+  } else {
+    el.textContent = "";
+  }
+  renderChannels();
+}
+
+// --- Text formatting ---
+
+function formatText(text) {
+  if (!text) return "";
+  let s = esc(text);
+  // Code blocks
+  s = s.replace(/```([\s\S]*?)```/g, "<pre>$1</pre>");
+  // Inline code
+  s = s.replace(/`([^`]+)`/g, "<code>$1</code>");
+  // Bold
+  s = s.replace(/\*([^*]+)\*/g, "<strong>$1</strong>");
+  // Italic
+  s = s.replace(/_([^_]+)_/g, "<em>$1</em>");
+  // Strikethrough
+  s = s.replace(/~([^~]+)~/g, "<del>$1</del>");
+  // Links: <url|label> or <url>
+  s = s.replace(/&lt;(https?:\/\/[^|&>]+)\|([^&>]+)&gt;/g, '<a href="$1" target="_blank" rel="noopener">$2</a>');
+  s = s.replace(/&lt;(https?:\/\/[^&>]+)&gt;/g, '<a href="$1" target="_blank" rel="noopener">$1</a>');
+  return s;
+}
+
+function esc(s) {
+  if (!s) return "";
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+// --- Actions ---
+
+async function loadChannels() {
+  state.channels = await api("/api/channels");
+  renderChannels();
+}
+
+async function loadStats() {
+  const stats = await api("/api/stats");
+  renderStats(stats);
+}
+
+async function loadContext() {
+  const ctx = await api("/api/context");
+  renderContext(ctx);
+}
+
+async function showActivity() {
+  state.view = "activity";
+  state.selectedChannel = null;
+  closeDetail();
+  renderChannels();
+
+  const hdr = document.getElementById("header-name");
+  hdr.textContent = "Activity";
+  hdr.removeAttribute("href");
+  document.getElementById("header-topic").textContent = "Recent messages across all channels";
+
+  await loadActivity();
+}
+
+async function loadActivity(isUpdate) {
+  const events = await api("/api/activity?limit=300");
+  const container = document.getElementById("messages-container");
+  const wasAtTop = container.scrollTop < 60;
+
+  renderActivity(events, container);
+
+  if (!isUpdate || wasAtTop) {
+    container.scrollTop = 0;
+  }
+}
+
+async function selectChannel(channelId) {
+  state.view = "channel";
+  state.selectedChannel = channelId;
+  state.searchResults = null;
+  closeDetail();
+  renderChannels();
+
+  const ch = state.channels.find(c => c.id === channelId);
+  const hdr = document.getElementById("header-name");
+  hdr.textContent = ch ? ch.display_name : channelId;
+  hdr.href = `${SLACK_URL}/archives/${channelId}`;
+  document.getElementById("header-topic").textContent = ch?.topic || "";
+
+  await loadMessages(channelId);
+}
+
+async function loadMessages(channelId, isUpdate) {
+  const messages = await api(`/api/channels/${channelId}/messages?limit=500`);
+  state.messages = messages;
+
+  const container = document.getElementById("messages-container");
+  const wasAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 60;
+
+  renderMessages(messages, container, channelId);
+
+  if (!isUpdate || wasAtBottom) {
+    container.scrollTop = container.scrollHeight;
+  }
+}
+
+async function openThread(channelId, threadTs) {
+  state.detailMode = "thread";
+  const panel = document.getElementById("detail-panel");
+  panel.classList.add("open");
+  document.getElementById("detail-title").textContent = "Thread";
+
+  const container = document.getElementById("detail-content");
+  container.innerHTML = `<div style="padding:20px;color:var(--text-muted);">Loading thread...</div>`;
+
+  const messages = await api(`/api/threads/${channelId}/${threadTs}`);
+  renderMessages(messages, container, channelId);
+}
+
+function openSearchResults(results) {
+  state.detailMode = "search";
+  state.searchResults = results;
+  const panel = document.getElementById("detail-panel");
+  panel.classList.add("open");
+  document.getElementById("detail-title").textContent = `Search results (${results.length})`;
+  renderSearchResults(results);
+}
+
+function closeDetail() {
+  state.detailMode = null;
+  state.searchResults = null;
+  document.getElementById("detail-panel").classList.remove("open");
+}
+
+// --- Search ---
+
+let searchTimer = null;
+
+document.getElementById("search-input").addEventListener("input", (e) => {
+  clearTimeout(searchTimer);
+  const q = e.target.value.trim();
+  if (!q) {
+    closeDetail();
+    return;
+  }
+  searchTimer = setTimeout(async () => {
+    const results = await api(`/api/search?q=${encodeURIComponent(q)}&limit=50`);
+    openSearchResults(results);
+  }, 300);
+});
+
+document.getElementById("search-input").addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    e.target.value = "";
+    closeDetail();
+  }
+});
+
+// --- Detail close ---
+
+document.getElementById("detail-close").addEventListener("click", closeDetail);
+
+// --- Heartbeat ---
+
+setInterval(() => {
+  fetch("/api/heartbeat", { method: "POST", keepalive: true }).catch(() => {});
+}, 10000);
+// Send one immediately on load
+fetch("/api/heartbeat", { method: "POST" }).catch(() => {});
+
+// --- Init ---
+
+async function init() {
+  await Promise.all([loadChannels(), loadStats(), loadContext()]);
+  connectSSE();
+  showActivity();
+}
+
+init();
+</script>
+</body>
+</html>

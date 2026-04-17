@@ -32,6 +32,8 @@ const INTERESTING_METHODS = new Set([
   "im.history",
   "mpim.history",
   "channels.info",
+  "chat.postMessage",
+  "chat.update",
   "users.info",
   "users.list",
   "users.conversations",
@@ -112,6 +114,10 @@ function processApiResponse(method, url, responseText, postChannel) {
 
   const keys = Object.keys(data);
   sendLog("info", `Captured ${method}: keys=[${keys.join(",")}] messages=${data.messages?.length ?? "none"} results=${data.results ? typeof data.results : "none"}`);
+
+  if (data.message && !data.messages && (method === "chat.postMessage" || method === "chat.update")) {
+    data.messages = [data.message];
+  }
 
   if (data.messages) {
     const channelId = data.channel_id || data.channel
@@ -281,7 +287,7 @@ function normalizeMessage(msg) {
     })),
     subtype: msg.subtype || null,
     bot_id: msg.bot_id || null,
-    username: msg.username || null,
+    username: msg.username || msg.bot_profile?.name || null,
   };
 }
 

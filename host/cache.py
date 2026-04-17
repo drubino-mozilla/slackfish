@@ -67,7 +67,9 @@ class SlackfishCache:
         return users.get(user_id)
 
     def update_users(self, users):
+        """Returns count of genuinely new users."""
         existing = self.get_users()
+        new_count = 0
         for u in users:
             uid = u.get("id")
             if not uid:
@@ -76,7 +78,9 @@ class SlackfishCache:
                 existing[uid].update({k: v for k, v in u.items() if v is not None})
             else:
                 existing[uid] = u
+                new_count += 1
         self._write_json(self._users_path(), existing)
+        return new_count
 
     # --- Messages ---
 
@@ -93,17 +97,23 @@ class SlackfishCache:
         return messages
 
     def update_messages(self, channel_id, messages, is_thread=False):
+        """Returns (new_messages_list, dup_count)."""
         if is_thread and messages:
             thread_ts = messages[0].get("thread_ts") or messages[0]["ts"]
-            self._update_thread(channel_id, thread_ts, messages)
-            return
+            return self._update_thread(channel_id, thread_ts, messages)
 
         path = self._messages_path(channel_id)
         data = self._read_json(path)
         existing = data.get("messages", [])
 
         existing_by_ts = {m["ts"]: m for m in existing}
+        new_msgs = []
+        dup_count = 0
         for msg in messages:
+            if msg["ts"] in existing_by_ts:
+                dup_count += 1
+            else:
+                new_msgs.append(msg)
             existing_by_ts[msg["ts"]] = msg
 
         merged = sorted(existing_by_ts.values(), key=lambda m: float(m["ts"]))
@@ -114,6 +124,7 @@ class SlackfishCache:
         data["channel_id"] = channel_id
         data["updated_at"] = time.time()
         self._write_json(path, data)
+        return new_msgs, dup_count
 
     # --- Threads ---
 
@@ -129,12 +140,19 @@ class SlackfishCache:
         return data.get("messages", [])
 
     def _update_thread(self, channel_id, thread_ts, messages):
+        """Returns (new_messages_list, dup_count)."""
         path = self._thread_path(channel_id, thread_ts)
         data = self._read_json(path)
         existing = data.get("messages", [])
 
         existing_by_ts = {m["ts"]: m for m in existing}
+        new_msgs = []
+        dup_count = 0
         for msg in messages:
+            if msg["ts"] in existing_by_ts:
+                dup_count += 1
+            else:
+                new_msgs.append(msg)
             existing_by_ts[msg["ts"]] = msg
 
         merged = sorted(existing_by_ts.values(), key=lambda m: float(m["ts"]))
@@ -146,6 +164,7 @@ class SlackfishCache:
         data["thread_ts"] = thread_ts
         data["updated_at"] = time.time()
         self._write_json(path, data)
+        return new_msgs, dup_count
 
     # --- Context ---
 
@@ -168,6 +187,26 @@ class SlackfishCache:
 
     def update_self(self, data):
         self._write_json(self._self_path(), data)
+
+    # --- Activity (cross-channel recent messages) ---
+
+    def get_recent_messages(self, limit=200):
+        """Return the most recent messages across all channels, newest first."""
+        messages_dir = os.path.join(self.cache_dir, "messages")
+        if not os.path.isdir(messages_dir):
+            return []
+
+        all_msgs = []
+        for filename in os.listdir(messages_dir):
+            if not filename.endswith(".json"):
+                continue
+            channel_id = filename[:-5]
+            data = self._read_json(os.path.join(messages_dir, filename))
+            for msg in data.get("messages", []):
+                all_msgs.append({**msg, "channel_id": channel_id})
+
+        all_msgs.sort(key=lambda m: float(m["ts"]), reverse=True)
+        return all_msgs[:limit]
 
     # --- Search ---
 
